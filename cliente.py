@@ -1,4 +1,5 @@
 import socket
+import sys
 
 # Configuración de conexión
 HOST = "localhost"
@@ -41,10 +42,18 @@ def iniciar_cliente():
             
     except ConnectionRefusedError:
         print(f"Error: No se pudo conectar. Asegurate de que el servidor esté corriendo en el puerto {PORT}.")
+    except KeyboardInterrupt:
+        # Atrapamos Ctrl+C para evitar el traceback feo en el cliente también
+        print("\nSalida forzada por el usuario.")
     except Exception as e:
         print(f"Ocurrió un error inesperado: {e}")
     finally:
+        # El cierre del socket en el finally garantiza que se libere el recurso
         cliente_socket.close()
 
 if __name__ == "__main__":
-    iniciar_cliente()
+    # Protegemos la ejecución global
+    try:
+        iniciar_cliente()
+    except KeyboardInterrupt:
+        sys.exit(0)

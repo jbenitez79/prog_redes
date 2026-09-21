@@ -62,74 +62,77 @@ def inicializar_socket():
         sys.exit(1)
 
 def recibir_mensajes(conexion, ip_cliente):
-    # Ciclo para recibir mensajes de un cliente específico
-    while True:
-        try:
-            datos = conexion.recv(1024)
-            if not datos:
-                print(f"El cliente {ip_cliente} se desconectó.")
-                break
-            
-            mensaje = datos.decode('utf-8')
-            print(f"[{ip_cliente}] dice: {mensaje}")
-            
-            # Guardamos en la base de datos
-            fecha_envio = guardar_mensaje(mensaje, ip_cliente)
-            
-            # Armamos la respuesta para el cliente
-            if fecha_envio:
-                respuesta = f"Mensaje recibido: {fecha_envio}"
-            else:
-                respuesta = "Error del servidor: no se pudo guardar el mensaje."
+    # Usamos try/finally para asegurar que el socket del cliente se cierre sí o sí
+    try:
+        while True:
+            try:
+                datos = conexion.recv(1024)
+                if not datos:
+                    print(f"El cliente {ip_cliente} se desconectó.")
+                    break
                 
-            conexion.send(respuesta.encode('utf-8'))
-            
-        except socket.timeout:
-            # El recv llegó a su tiempo límite (1 seg). El bucle sigue,
-            # pero esto le da tiempo a Python a procesar el Ctrl+C si el usuario lo presionó.
-            continue
-        except ConnectionResetError:
-            print(f"Conexión perdida con el cliente {ip_cliente}")
-            break
-        except KeyboardInterrupt:
-            # Si tocan Ctrl+C mientras el cliente está chateando, lo burbujeamos hacia arriba
-            raise
-        except Exception as e:
-            print(f"Error al procesar el mensaje: {e}")
-            break
-    
-    conexion.close()
+                mensaje = datos.decode('utf-8')
+                print(f"[{ip_cliente}] dice: {mensaje}")
+                
+                # Guardamos en la base de datos
+                fecha_envio = guardar_mensaje(mensaje, ip_cliente)
+                
+                # Armamos la respuesta para el cliente
+                if fecha_envio:
+                    respuesta = f"Mensaje recibido: {fecha_envio}"
+                else:
+                    respuesta = "Error del servidor: no se pudo guardar el mensaje."
+                    
+                conexion.send(respuesta.encode('utf-8'))
+                
+            except socket.timeout:
+                # Timeout para dar lugar al KeyboardInterrupt
+                continue
+            except ConnectionResetError:
+                print(f"Conexión perdida con el cliente {ip_cliente}")
+                break
+            except Exception as e:
+                print(f"Error al procesar el mensaje: {e}")
+                break
+    finally:
+        # Se ejecuta siempre, incluso si hay un KeyboardInterrupt o error no manejado
+        conexion.close()
 
 def aceptar_conexiones(server_socket):
     # Truco vital en Windows: agregar un timeout permite que Python procese el Ctrl+C
     server_socket.settimeout(1.0)
     print("Esperando conexiones (Presioná Ctrl+C para salir)...")
     
-    while True:
-        try:
-            conexion, direccion = server_socket.accept()
-            
-            # También le ponemos timeout a la conexión individual del cliente
-            conexion.settimeout(1.0)
-            
-            ip_cliente = direccion[0]
-            print(f"¡Nueva conexión desde: {ip_cliente}!")
-            
-            recibir_mensajes(conexion, ip_cliente)
-            
-        except socket.timeout:
-            # Se acabó el segundo de espera para aceptar conexiones.
-            # Vuelve a intentar silenciosamente. Esto destraba el hilo principal.
-            continue
-        except KeyboardInterrupt:
-            print("\nApagando el servidor manualmente...")
-            break
-        except Exception as e:
-            print(f"Error al aceptar la conexión: {e}")
-            
-    server_socket.close()
+    # Bloque try/except/finally global de conexiones para apagado totalmente limpio
+    try:
+        while True:
+            try:
+                conexion, direccion = server_socket.accept()
+                
+                # También le ponemos timeout a la conexión individual del cliente
+                conexion.settimeout(1.0)
+                
+                ip_cliente = direccion[0]
+                print(f"¡Nueva conexión desde: {ip_cliente}!")
+                
+                recibir_mensajes(conexion, ip_cliente)
+                
+            except socket.timeout:
+                continue
+            except Exception as e:
+                print(f"Error al aceptar la conexión: {e}")
+                
+    except KeyboardInterrupt:
+        print("\nApagando el servidor manualmente...")
+    finally:
+        # Garantiza que el socket principal se libere sin importar qué pase
+        server_socket.close()
 
 if __name__ == "__main__":
-    inicializar_db()
-    sock = inicializar_socket()
-    aceptar_conexiones(sock)
+    # Prevenimos cualquier traceback global extra
+    try:
+        inicializar_db()
+        sock = inicializar_socket()
+        aceptar_conexiones(sock)
+    except KeyboardInterrupt:
+        sys.exit(0)
