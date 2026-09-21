@@ -1,7 +1,7 @@
 import socket
 
 # Configuración de conexión
-HOST = "127.0.0.1"
+HOST = "localhost"
 PORT = 5000
 
 def iniciar_cliente():
@@ -17,21 +17,27 @@ def iniciar_cliente():
         while True:
             mensaje = input("Vos: ")
             
-            # Condición de salida que pide el TP
-            if mensaje.strip().lower() == 'éxito':
-                print("Desconectando del chat...")
-                break
-                
             # Evitar mandar mensajes vacíos
             if not mensaje.strip():
                 continue
                 
-            # Enviar el mensaje codificado
-            cliente_socket.send(mensaje.encode('utf-8'))
+            # Usamos sendall() para asegurar que se envíe el mensaje completo por la red
+            cliente_socket.sendall(mensaje.encode('utf-8'))
             
             # Esperar la confirmación del servidor
             respuesta = cliente_socket.recv(1024).decode('utf-8')
+            
+            # Si recv devuelve un string vacío, el servidor se cayó o cerró la conexión
+            if not respuesta:
+                print("\nError: El servidor cerró la conexión inesperadamente.")
+                break
+                
             print(f"Servidor: {respuesta}")
+            
+            # Condición de salida (ahora sale DESPUÉS de enviarlo al servidor y recibir acuse)
+            if mensaje.strip().lower() == 'éxito':
+                print("Desconectando del chat...")
+                break
             
     except ConnectionRefusedError:
         print(f"Error: No se pudo conectar. Asegurate de que el servidor esté corriendo en el puerto {PORT}.")

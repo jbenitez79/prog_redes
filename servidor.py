@@ -5,7 +5,7 @@ import sys
 
 # Configuraciones globales
 DB_NAME = "chat.db"
-HOST = "127.0.0.1"
+HOST = "localhost"
 PORT = 5000
 
 def inicializar_db():
@@ -84,9 +84,16 @@ def recibir_mensajes(conexion, ip_cliente):
                 
             conexion.send(respuesta.encode('utf-8'))
             
+        except socket.timeout:
+            # El recv llegó a su tiempo límite (1 seg). El bucle sigue,
+            # pero esto le da tiempo a Python a procesar el Ctrl+C si el usuario lo presionó.
+            continue
         except ConnectionResetError:
             print(f"Conexión perdida con el cliente {ip_cliente}")
             break
+        except KeyboardInterrupt:
+            # Si tocan Ctrl+C mientras el cliente está chateando, lo burbujeamos hacia arriba
+            raise
         except Exception as e:
             print(f"Error al procesar el mensaje: {e}")
             break
@@ -94,19 +101,26 @@ def recibir_mensajes(conexion, ip_cliente):
     conexion.close()
 
 def aceptar_conexiones(server_socket):
-    # Bucle principal para aceptar clientes
-    print("Esperando conexiones...")
+    # Truco vital en Windows: agregar un timeout permite que Python procese el Ctrl+C
+    server_socket.settimeout(1.0)
+    print("Esperando conexiones (Presioná Ctrl+C para salir)...")
+    
     while True:
         try:
             conexion, direccion = server_socket.accept()
+            
+            # También le ponemos timeout a la conexión individual del cliente
+            conexion.settimeout(1.0)
+            
             ip_cliente = direccion[0]
             print(f"¡Nueva conexión desde: {ip_cliente}!")
             
-            # Pasamos la conexión a la función que maneja los mensajes
-            # (En un sistema más complejo acá usaríamos hilos/threads, 
-            # pero para un cliente a la vez esto funciona perfecto)
             recibir_mensajes(conexion, ip_cliente)
             
+        except socket.timeout:
+            # Se acabó el segundo de espera para aceptar conexiones.
+            # Vuelve a intentar silenciosamente. Esto destraba el hilo principal.
+            continue
         except KeyboardInterrupt:
             print("\nApagando el servidor manualmente...")
             break
