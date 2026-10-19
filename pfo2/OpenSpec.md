@@ -1,415 +1,748 @@
-Sí. Te la puedo estructurar como una **OpenSpec** clara y orientada a implementación, separando requisitos, arquitectura, comportamiento esperado, errores y criterios de aceptación.
+# OpenSpec — PFO 2: Sistema de Gestión de Tareas con API y Base de Datos
 
-## OpenSpec — Servidor de sockets TCP con SQLite
+## 1. Nombre de la iniciativa
 
-### 1\. Objetivo
+**Sistema de Gestión de Tareas con API y Base de Datos**
 
-Desarrollar una aplicación cliente-servidor en Python que permita:
+## 2. Objetivo
 
-- Levantar un servidor TCP en `localhost:5000`.
-- Aceptar conexiones de clientes.
-- Recibir y almacenar mensajes en una base de datos SQLite.
-- Registrar información del mensaje, incluyendo fecha/hora e IP del cliente.
-- Responder al cliente con una confirmación.
-- Permitir que el cliente envíe múltiples mensajes en una misma sesión.
-- Finalizar el envío cuando el usuario escriba `éxito`.
-- Aplicar buenas prácticas de modularización, comentarios y manejo de errores.
+Desarrollar una aplicación cliente-servidor que permita a un usuario registrarse, iniciar sesión y gestionar sus tareas mediante una API REST desarrollada con Flask.
 
-### 2\. Alcance
+La aplicación deberá utilizar SQLite para la persistencia de usuarios y tareas, proteger las contraseñas mediante hashing y proporcionar un cliente de consola desde el cual el usuario pueda interactuar con el sistema.
 
-El proyecto estará compuesto por dos aplicaciones:
+El flujo principal será:
 
+```text
+Registro
+   ↓
+Inicio de sesión
+   ↓
+Menú de tareas
+   ├── Listar tareas
+   ├── Crear tarea
+   ├── Cerrar tarea
+   ├── Cerrar sesión
+   └── Salir
 ```
-proyecto/
-├── servidor.py
-├── cliente.py
-└── mensajes.db
-```
-
-La base de datos SQLite deberá crearse automáticamente si no existe.
 
 ---
 
-## 3\. Servidor
+# 3. Alcance
 
-### 3.1 Configuración de red
+La solución deberá contemplar:
 
-El servidor deberá crear un socket TCP/IP que escuche exclusivamente en:
+* Registro de usuarios.
+* Inicio de sesión.
+* Protección de contraseñas mediante hashing.
+* Persistencia mediante SQLite.
+* Creación de tareas.
+* Listado de tareas.
+* Cierre de tareas.
+* Cierre de sesión.
+* Salida del cliente de consola.
+* API REST desarrollada con Flask.
+* Cliente de consola que consuma la API.
+* Documentación de instalación, ejecución y pruebas.
+* Capturas de pantalla de pruebas exitosas.
+* Publicación del proyecto en GitHub.
+* Uso de GitHub Pages para alojar el proyecto.
 
-```
-Host: localhost
-Puerto: 5000
-```
-
-Deberá utilizar el módulo estándar `socket` de Python.
-
-La configuración deberá estar acompañada por comentarios explicativos, por ejemplo:
-
-```
-# Configuración del socket TCP/IP
-HOST = "localhost"
-PORT = 5000
-```
-
-### 3.2 Modularización
-
-El servidor deberá dividir sus responsabilidades en funciones independientes.
-
-Como mínimo deberá contar con funciones equivalentes a:
-
-```
-inicializar_socket()
-aceptar_conexiones()
-guardar_mensaje()
-manejar_errores()
-```
-
-La implementación podrá agregar funciones auxiliares si mejora la separación de responsabilidades.
-
-### 3.3 Inicialización del socket
-
-La función de inicialización deberá:
-
-1. Crear un socket TCP.
-2. Configurar las opciones necesarias para reutilizar la dirección cuando corresponda.
-3. Asociarlo a `localhost:5000`.
-4. Dejarlo en estado de escucha.
-5. Informar mediante consola que el servidor está esperando conexiones.
-
-Deberá contemplar específicamente el caso en que el puerto `5000` ya esté ocupado.
-
-Ejemplo de comportamiento esperado:
-
-```
-Error: el puerto 5000 ya está en uso.
-```
-
-El programa no deberá mostrar un traceback innecesario al usuario final.
+El enunciado original establece como objetivos implementar una API REST, autenticación con protección de contraseñas, persistencia SQLite y un cliente de consola.
 
 ---
 
-## 4\. Recepción de conexiones y mensajes
+# 4. Arquitectura
+
+```text
+┌──────────────────────────┐
+│    Cliente de consola    │
+│                          │
+│  1. Registrarse          │
+│  2. Iniciar sesión       │
+│  3. Listar tareas        │
+│  4. Crear tarea          │
+│  5. Cerrar tarea         │
+│  6. Cerrar sesión        │
+│  7. Salir                │
+└────────────┬─────────────┘
+             │ HTTP / JSON
+             ▼
+┌──────────────────────────┐
+│        API Flask         │
+├──────────────────────────┤
+│ POST /registro           │
+│ POST /login              │
+│ GET  /tareas             │
+│ POST /tareas              │
+│ PUT  /tareas/<id>/cerrar │
+│ POST /logout              │
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│          SQLite          │
+├──────────────────────────┤
+│ usuarios                 │
+│ tareas                   │
+└──────────────────────────┘
+```
+
+---
+
+# 5. Modelo de datos
+
+## 5.1 Usuario
+
+La aplicación deberá almacenar como mínimo:
+
+```text
+Usuario
+├── id
+├── usuario
+└── contraseña_hash
+```
+
+La contraseña original nunca deberá almacenarse en texto plano.
+
+## 5.2 Tarea
+
+Cada tarea deberá estar asociada a un usuario.
+
+Estructura propuesta:
+
+```text
+Tarea
+├── id
+├── usuario_id
+├── titulo
+├── descripcion
+└── estado
+```
+
+El campo `estado` deberá permitir diferenciar al menos:
+
+```text
+pendiente
+cerrada
+```
+
+La relación entre usuario y tarea permitirá que cada usuario consulte y gestione únicamente sus propias tareas.
+
+---
+
+# 6. Requerimientos funcionales
+
+## RF-01 — Registro de usuario
+
+El sistema deberá permitir crear un usuario mediante:
+
+```http
+POST /registro
+```
+
+### Request
+
+```json
+{
+  "usuario": "nombre",
+  "contraseña": "1234"
+}
+```
+
+### Reglas
+
+* `usuario` es obligatorio.
+* `contraseña` es obligatoria.
+* La contraseña deberá ser hasheada antes de almacenarse.
+* El usuario deberá persistirse en SQLite.
+* No se deberá almacenar la contraseña original.
+
+El formato de registro y el requisito de utilizar contraseñas hasheadas están definidos en el enunciado original.
+
+---
+
+# 7. RF-02 — Inicio de sesión
+
+El sistema deberá permitir iniciar sesión mediante:
+
+```http
+POST /login
+```
+
+### Request
+
+```json
+{
+  "usuario": "nombre",
+  "contraseña": "1234"
+}
+```
+
+### Comportamiento
 
 El servidor deberá:
 
-1. Esperar conexiones entrantes.
-2. Aceptar un cliente.
-3. Obtener la IP del cliente.
-4. Recibir el mensaje enviado.
-5. Procesarlo.
-6. Guardarlo en SQLite.
-7. Generar un timestamp.
-8. Responder al cliente.
+1. Buscar el usuario.
+2. Verificar la contraseña contra el hash almacenado.
+3. Crear una sesión autenticada.
+4. Permitir al usuario acceder a sus tareas.
 
-El servidor deberá poder procesar múltiples mensajes enviados por el mismo cliente sin necesidad de reiniciarse.
+El requisito original establece que `/login` debe verificar las credenciales y permitir el acceso a las tareas.
 
 ---
 
-## 5\. Base de datos
+# 8. RF-03 — Listar tareas
 
-Se deberá utilizar exclusivamente el módulo estándar:
+El usuario autenticado deberá poder consultar sus tareas mediante:
 
-```
-sqlite3
-```
-
-La base de datos deberá almacenarse localmente, por ejemplo:
-
-```
-mensajes.db
+```http
+GET /tareas
 ```
 
-### 5.1 Tabla
+### Comportamiento
 
-Deberá existir una tabla para almacenar los mensajes con los siguientes campos:
+El endpoint deberá devolver las tareas pertenecientes al usuario autenticado.
 
-| Campo | Descripción |
-| --- | --- |
-| `id` | Identificador único del mensaje |
-| `contenido` | Texto recibido del cliente |
-| `fecha_envio` | Fecha y hora en que se recibió/procesó el mensaje |
-| `ip_cliente` | Dirección IP del cliente |
+Ejemplo:
 
-Una definición equivalente a la siguiente será válida:
-
-```
-CREATE TABLE IF NOT EXISTS mensajes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    contenido TEXT NOT NULL,
-    fecha_envio TEXT NOT NULL,
-    ip_cliente TEXT NOT NULL
-);
-```
-
-### 5.2 Persistencia
-
-Cada mensaje válido recibido deberá generar un registro independiente.
-
-La consulta deberá utilizar parámetros en lugar de concatenar directamente el contenido recibido:
-
-```
-cursor.execute(
-    """
-    INSERT INTO mensajes (contenido, fecha_envio, ip_cliente)
-    VALUES (?, ?, ?)
-    """,
-    (contenido, timestamp, ip_cliente)
-)
+```json
+[
+  {
+    "id": 1,
+    "titulo": "Estudiar Flask",
+    "descripcion": "Repasar endpoints REST",
+    "estado": "pendiente"
+  },
+  {
+    "id": 2,
+    "titulo": "Preparar README",
+    "descripcion": "Documentar instalación",
+    "estado": "cerrada"
+  }
+]
 ```
 
-Esto permitirá evitar problemas derivados de insertar directamente datos proporcionados por el cliente.
+### Reglas
+
+* Solo podrán consultarse tareas del usuario autenticado.
+* Las tareas deberán recuperarse desde SQLite.
+* El usuario no podrá acceder a tareas pertenecientes a otros usuarios.
 
 ---
 
-## 6\. Manejo de errores de base de datos
+# 9. RF-04 — Crear tarea
 
-El servidor deberá contemplar el caso en que SQLite no pueda abrir, crear o modificar la base de datos.
+El usuario autenticado deberá poder crear una nueva tarea mediante:
 
-Ante un error de base de datos deberá:
-
-- Capturar la excepción correspondiente.
-- Informar claramente el problema.
-- Evitar que un error de SQLite genere un traceback innecesario.
-- No enviar una confirmación de `"Mensaje recibido"` si el mensaje no pudo guardarse correctamente.
-
-El error deberá estar diferenciado del error de conexión/socket.
-
----
-
-## 7\. Respuesta del servidor
-
-Una vez almacenado correctamente un mensaje, el servidor deberá responder al cliente con el formato:
-
-```
-Mensaje recibido: <timestamp>
+```http
+POST /tareas
 ```
 
-Por ejemplo:
+### Request
 
-```
-Mensaje recibido: 2026-10-07 19:15:32
-```
-
-El timestamp deberá corresponder al momento en que el servidor procesa el mensaje.
-
----
-
-# 8\. Cliente
-
-El cliente deberá implementarse como un programa Python independiente.
-
-### 8.1 Conexión
-
-Deberá conectarse a:
-
-```
-localhost:5000
+```json
+{
+  "titulo": "Estudiar Flask",
+  "descripcion": "Repasar endpoints REST"
+}
 ```
 
-Utilizando un socket TCP.
+### Comportamiento
 
-### 8.2 Envío de mensajes
+El sistema deberá:
 
-El cliente deberá solicitar mensajes al usuario mediante la consola.
+1. Validar que exista una sesión autenticada.
+2. Recibir los datos de la tarea.
+3. Asociar la tarea al usuario autenticado.
+4. Crear la tarea con estado `pendiente`.
+5. Persistirla en SQLite.
 
-Flujo esperado:
+### Criterio de aceptación
 
-```
-Ingrese un mensaje: Hola servidor
-Respuesta: Mensaje recibido: 2026-10-07 19:15:32
+Una tarea creada deberá aparecer posteriormente al ejecutar:
 
-Ingrese un mensaje: Segundo mensaje
-Respuesta: Mensaje recibido: 2026-10-07 19:15:40
-
-Ingrese un mensaje: éxito
-```
-
-Mientras el usuario no escriba `éxito`, el cliente deberá:
-
-1. Obtener el texto.
-2. Enviarlo al servidor.
-3. Esperar la respuesta.
-4. Mostrar la respuesta.
-5. Volver a solicitar otro mensaje.
-
-### 8.3 Finalización
-
-Cuando el usuario introduzca exactamente:
-
-```
-éxito
-```
-
-el cliente deberá cerrar la conexión y finalizar su ejecución.
-
-El mensaje `éxito` no debería almacenarse en la base de datos, salvo que la implementación defina explícitamente otro comportamiento.
-
----
-
-# 9\. Manejo de errores del cliente
-
-El cliente deberá contemplar al menos:
-
-- Servidor apagado.
-- Puerto incorrecto o inaccesible.
-- Conexión interrumpida.
-- Error durante el envío o recepción.
-
-Por ejemplo:
-
-```
-Error: no se pudo conectar con el servidor en localhost:5000.
-```
-
-El programa deberá manejar estos errores de forma controlada.
-
----
-
-# 10\. Comentarios y documentación
-
-El código deberá incluir comentarios en las secciones importantes.
-
-Como mínimo:
-
-```
-# Configuración del socket TCP/IP
-
-# Inicialización de la base de datos
-
-# Esperar conexiones de clientes
-
-# Recibir mensaje del cliente
-
-# Guardar mensaje en SQLite
-
-# Enviar confirmación al cliente
-```
-
-Los comentarios deberán explicar **qué hace cada sección y, cuando sea relevante, por qué se realiza de determinada manera**, evitando comentar obviedades innecesariamente.
-
----
-
-# 11\. Flujo general
-
-```
-                 ┌────────────────────┐
-                 │      Cliente       │
-                 └─────────┬──────────┘
-                           │
-                     Conecta a
-                   localhost:5000
-                           │
-                           ▼
-                 ┌────────────────────┐
-                 │      Servidor      │
-                 │    Socket TCP      │
-                 └─────────┬──────────┘
-                           │
-                     recibe mensaje
-                           │
-                           ▼
-                 ┌────────────────────┐
-                 │      SQLite        │
-                 │      mensajes      │
-                 └─────────┬──────────┘
-                           │
-                    mensaje guardado
-                           │
-                           ▼
-                 ┌────────────────────┐
-                 │ Respuesta cliente  │
-                 │ "Mensaje recibido  │
-                 │   : <timestamp>"   │
-                 └────────────────────┘
+```http
+GET /tareas
 ```
 
 ---
 
-# 12\. Criterios de aceptación
+# 10. RF-05 — Cerrar tarea
 
-### Servidor
+El usuario autenticado deberá poder marcar una tarea como cerrada mediante:
 
-- [ ]El servidor se ejecuta correctamente mediante Python.
-- [ ]Escucha en `localhost:5000`.
-- [ ]Utiliza TCP mediante `socket`.
-- [ ]La creación/configuración del socket está separada de la lógica de recepción.
-- [ ]Puede aceptar conexiones de clientes.
-- [ ]Puede recibir múltiples mensajes.
-- [ ]Obtiene la IP del cliente.
-- [ ]Guarda cada mensaje en SQLite.
-- [ ]La tabla contiene `id`, `contenido`, `fecha_envio` e `ip_cliente`.
-- [ ]Genera automáticamente la base de datos si no existe.
-- [ ]Responde con `Mensaje recibido: <timestamp>`.
-- [ ]Maneja correctamente el puerto ocupado.
-- [ ]Maneja errores de SQLite.
-- [ ]El código contiene comentarios explicativos en las secciones clave.
-
-### Cliente
-
-- [ ]Se conecta a `localhost:5000`.
-- [ ]Permite enviar múltiples mensajes.
-- [ ]Muestra la respuesta del servidor después de cada envío.
-- [ ]Continúa solicitando mensajes hasta recibir `éxito`.
-- [ ]Cierra correctamente la conexión al finalizar.
-- [ ]Maneja errores de conexión.
-
-### Prueba manual
-
-La solución deberá poder probarse utilizando **dos terminales**:
-
-**Terminal 1:**
-
-```
-python servidor.py
+```http
+PUT /tareas/<id>/cerrar
 ```
 
-Resultado esperado:
+Ejemplo:
 
-```
-Servidor iniciado en localhost:5000
-Esperando conexiones...
-```
-
-**Terminal 2:**
-
-```
-python cliente.py
+```http
+PUT /tareas/1/cerrar
 ```
 
-Se deberá poder enviar varios mensajes y verificar posteriormente que los registros fueron almacenados en `mensajes.db`.
+### Comportamiento
+
+El sistema deberá:
+
+1. Verificar que exista una sesión autenticada.
+2. Buscar la tarea indicada.
+3. Verificar que la tarea pertenezca al usuario autenticado.
+4. Cambiar su estado a `cerrada`.
+5. Persistir el cambio en SQLite.
+
+### Criterio de aceptación
+
+Después de cerrar una tarea, al listar las tareas deberá aparecer:
+
+```json
+{
+  "id": 1,
+  "estado": "cerrada"
+}
+```
 
 ---
 
-## 13\. Restricciones técnicas
+# 11. RF-06 — Cerrar sesión
 
-- Lenguaje: **Python 3**.
-- Comunicación: **TCP/IP mediante****`socket`**.
-- Base de datos: **SQLite mediante****`sqlite3`**.
-- No se requieren frameworks externos.
-- El servidor y cliente deberán ser módulos/programas separados.
-- La lógica deberá estar modularizada mediante funciones.
-- Los errores deberán manejarse mediante excepciones (`try/except`) donde corresponda.
+El usuario deberá poder cerrar su sesión mediante:
 
-## 14\. Resultado esperado
-
-Al finalizar, el proyecto deberá demostrar un flujo completo:
-
-```
-Cliente
-   │
-   │ "Hola"
-   ▼
-Servidor
-   │
-   ├── recibe mensaje
-   ├── obtiene IP
-   ├── genera timestamp
-   ├── guarda en SQLite
-   │
-   ▼
-Cliente
-   │
-   └── "Mensaje recibido: 2026-10-07 19:15:32"
+```http
+POST /logout
 ```
 
-Y la base de datos deberá conservar los mensajes para poder comprobar que la comunicación y persistencia funcionan correctamente.
+### Comportamiento
+
+El servidor deberá invalidar la sesión autenticada.
+
+Después del logout:
+
+* El usuario no deberá poder listar tareas.
+* El usuario no deberá poder crear tareas.
+* El usuario no deberá poder cerrar tareas.
+* El cliente deberá regresar al menú de usuario no autenticado.
+
+---
+
+# 12. RF-07 — Salir del cliente
+
+El cliente de consola deberá ofrecer una opción para finalizar completamente la aplicación.
+
+Ejemplo:
+
+```text
+=========================
+ SISTEMA DE TAREAS
+=========================
+
+1. Listar tareas
+2. Crear tarea
+3. Cerrar tarea
+4. Cerrar sesión
+5. Salir
+
+Seleccione una opción:
+```
+
+La opción **Salir** deberá finalizar la ejecución del cliente.
+
+Esta funcionalidad es independiente del cierre de sesión:
+
+* **Cerrar sesión:** termina la sesión del usuario y mantiene funcionando el cliente.
+* **Salir:** termina la ejecución del cliente.
+
+---
+
+# 13. Flujo del cliente
+
+## 13.1 Usuario no autenticado
+
+```text
+=========================
+ SISTEMA DE TAREAS
+=========================
+
+1. Registrarse
+2. Iniciar sesión
+3. Salir
+```
+
+## 13.2 Usuario autenticado
+
+```text
+=========================
+ MIS TAREAS
+=========================
+
+1. Listar tareas
+2. Crear tarea
+3. Cerrar tarea
+4. Cerrar sesión
+5. Salir
+```
+
+---
+
+# 14. Reglas de autenticación
+
+Las operaciones de tareas deberán requerir autenticación:
+
+| Operación         | Autenticación |
+| ----------------- | ------------- |
+| Registro          | No            |
+| Login             | No            |
+| Listar tareas     | Sí            |
+| Crear tarea       | Sí            |
+| Cerrar tarea      | Sí            |
+| Logout            | Sí            |
+| Salir del cliente | No            |
+
+La aplicación deberá impedir el acceso a las funcionalidades de tareas cuando no exista un usuario autenticado.
+
+---
+
+# 15. API
+
+| Método | Endpoint              | Autenticación | Descripción       |
+| ------ | --------------------- | ------------: | ----------------- |
+| POST   | `/registro`           |            No | Registrar usuario |
+| POST   | `/login`              |            No | Iniciar sesión    |
+| GET    | `/tareas`             |            Sí | Listar tareas     |
+| POST   | `/tareas`             |            Sí | Crear tarea       |
+| PUT    | `/tareas/<id>/cerrar` |            Sí | Cerrar tarea      |
+| POST   | `/logout`             |            Sí | Cerrar sesión     |
+
+---
+
+# 16. Requerimientos técnicos
+
+## RT-01 — Flask
+
+El servidor deberá desarrollarse utilizando Flask.
+
+## RT-02 — SQLite
+
+La persistencia deberá realizarse utilizando SQLite.
+
+## RT-03 — Hashing
+
+Deberá utilizarse una librería para hashear contraseñas.
+
+Las contraseñas no podrán almacenarse en texto plano.
+
+## RT-04 — Servidor
+
+El archivo principal deberá ser:
+
+```text
+servidor.py
+```
+
+El mismo deberá contener la API Flask y la interacción con SQLite.
+
+## RT-05 — Cliente
+
+Se deberá implementar un cliente de consola que consuma la API.
+
+Se propone:
+
+```text
+cliente.py
+```
+
+---
+
+# 17. Estructura propuesta
+
+```text
+pfo2/
+│
+├── servidor.py
+├── cliente.py
+├── README.md
+├── requirements.txt
+├── tareas.db
+│
+└── screenshots/
+    ├── registro.png
+    ├── login.png
+    ├── listar_tareas.png
+    ├── crear_tarea.png
+    ├── cerrar_tarea.png
+    └── logout.png
+```
+
+---
+
+# 18. Manejo de errores
+
+La API deberá devolver respuestas apropiadas ante situaciones como:
+
+### Usuario inexistente
+
+```http
+401 Unauthorized
+```
+
+### Contraseña incorrecta
+
+```http
+401 Unauthorized
+```
+
+### Usuario no autenticado
+
+```http
+401 Unauthorized
+```
+
+### Tarea inexistente
+
+```http
+404 Not Found
+```
+
+### Intento de modificar una tarea de otro usuario
+
+```http
+403 Forbidden
+```
+
+### Datos incompletos
+
+```http
+400 Bad Request
+```
+
+---
+
+# 19. Pruebas
+
+Se deberán demostrar como mínimo los siguientes escenarios.
+
+## Prueba 1 — Registro
+
+```text
+Registrar usuario
+        ↓
+Usuario almacenado
+        ↓
+Contraseña almacenada como hash
+```
+
+## Prueba 2 — Login
+
+```text
+Ingresar credenciales
+        ↓
+Credenciales válidas
+        ↓
+Sesión iniciada
+```
+
+## Prueba 3 — Crear tarea
+
+```text
+Crear tarea
+        ↓
+Tarea persistida
+        ↓
+Estado = pendiente
+```
+
+## Prueba 4 — Listar tareas
+
+```text
+Listar tareas
+        ↓
+Se muestran las tareas del usuario
+```
+
+## Prueba 5 — Cerrar tarea
+
+```text
+Seleccionar tarea
+        ↓
+Cerrar tarea
+        ↓
+Estado = cerrada
+```
+
+## Prueba 6 — Cerrar sesión
+
+```text
+Cerrar sesión
+        ↓
+Sesión invalidada
+        ↓
+No se puede acceder a las tareas
+```
+
+## Prueba 7 — Salir
+
+```text
+Seleccionar "Salir"
+        ↓
+Cliente finalizado
+```
+
+El entregable original requiere capturas de pantalla de pruebas exitosas.
+
+---
+
+# 20. Documentación
+
+Se deberá incluir:
+
+```text
+README.md
+```
+
+El README deberá explicar:
+
+* Requisitos previos.
+* Instalación.
+* Instalación de dependencias.
+* Creación/inicialización de la base de datos.
+* Ejecución del servidor.
+* Ejecución del cliente.
+* Flujo de registro.
+* Flujo de login.
+* Listado de tareas.
+* Creación de tareas.
+* Cierre de tareas.
+* Cierre de sesión.
+* Salida del cliente.
+* Ejemplos de uso.
+* Evidencias de pruebas.
+
+El enunciado original exige documentación con instrucciones para ejecutar y probar el proyecto.
+
+---
+
+# 21. Entregables
+
+### E-01 — Código fuente
+
+```text
+servidor.py
+cliente.py
+```
+
+### E-02 — Base de datos
+
+```text
+SQLite
+```
+
+### E-03 — Documentación
+
+```text
+README.md
+```
+
+### E-04 — Capturas
+
+Evidencias de las pruebas exitosas.
+
+### E-05 — GitHub
+
+Repositorio con el código fuente.
+
+### E-06 — GitHub Pages
+
+Alojamiento del proyecto mediante GitHub Pages, según el requisito original.
+
+### E-07 — Respuestas conceptuales
+
+Responder:
+
+1. ¿Por qué hashear contraseñas?
+2. ¿Cuáles son las ventajas de usar SQLite en este proyecto?
+
+Estas preguntas forman parte de los entregables conceptuales originales.
+
+---
+
+# 22. Criterios de aceptación
+
+La iniciativa se considerará terminada cuando:
+
+* [ ] Un usuario pueda registrarse.
+* [ ] Las contraseñas se almacenen hasheadas.
+* [ ] Un usuario pueda iniciar sesión.
+* [ ] Un usuario autenticado pueda listar sus tareas.
+* [ ] Un usuario autenticado pueda crear tareas.
+* [ ] Las nuevas tareas comiencen en estado `pendiente`.
+* [ ] Un usuario autenticado pueda cerrar sus tareas.
+* [ ] Una tarea cerrada quede en estado `cerrada`.
+* [ ] Un usuario no pueda acceder a tareas de otro usuario.
+* [ ] Un usuario pueda cerrar sesión.
+* [ ] Después del logout no pueda utilizar las operaciones protegidas.
+* [ ] El cliente permita salir de la aplicación.
+* [ ] Los datos persistan en SQLite.
+* [ ] La API esté implementada con Flask.
+* [ ] Exista `servidor.py`.
+* [ ] Exista un cliente de consola.
+* [ ] Exista `README.md`.
+* [ ] Existan capturas de las pruebas.
+* [ ] El proyecto esté publicado en GitHub.
+* [ ] Se haya configurado GitHub Pages.
+* [ ] Se hayan respondido las preguntas conceptuales.
+
+---
+
+# 23. Fuera de alcance
+
+No se incorporan, salvo que posteriormente se soliciten:
+
+* Edición de tareas.
+* Eliminación de tareas.
+* Prioridades.
+* Fechas de vencimiento.
+* Categorías.
+* Asignación de tareas entre usuarios.
+* Roles administrativos.
+* Recuperación de contraseñas.
+* JWT/OAuth.
+* Notificaciones.
+* Aplicación web completa.
+
+---
+
+# 24. Definición de terminado
+
+El sistema deberá permitir completar el siguiente flujo de punta a punta:
+
+```text
+┌─────────────────────┐
+│     Registrarse     │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│   Iniciar sesión    │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│    Menú de tareas   │
+├─────────────────────┤
+│ 1. Listar tareas    │
+│ 2. Crear tarea      │
+│ 3. Cerrar tarea     │
+│ 4. Cerrar sesión    │
+│ 5. Salir            │
+└─────────────────────┘
+           │
+           ├──── Listar ────→ GET /tareas
+           │
+           ├──── Crear ─────→ POST /tareas
+           │
+           ├──── Cerrar ────→ PUT /tareas/<id>/cerrar
+           │
+           ├──── Logout ────→ POST /logout
+           │
+           └──── Salir ─────→ Finalizar cliente
+```
+
+La solución deberá demostrar que las operaciones de gestión de tareas funcionan únicamente para usuarios autenticados y que los datos permanecen almacenados en SQLite.

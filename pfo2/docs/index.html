@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PFO 2 — Sistema de Gestión de Tareas con API y Base de Datos</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --card-border: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #10b981;
+            --code-bg: #0b1120;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding-bottom: 60px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            padding: 50px 20px;
+            text-align: center;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        header h1 {
+            font-size: 2.4rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.15rem;
+            opacity: 0.95;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            color: #60a5fa;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 14px;
+            border: 1px solid var(--card-border);
+        }
+
+        th {
+            background-color: #1e3a8a;
+            color: #ffffff;
+        }
+
+        tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .method {
+            display: inline-block;
+            font-weight: bold;
+            font-size: 0.8rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .method.post { background: #166534; color: #86efac; }
+        .method.get { background: #1e40af; color: #93c5fd; }
+        .method.put { background: #854d0e; color: #fde047; }
+
+        pre, code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background-color: var(--code-bg);
+            border-radius: 6px;
+        }
+
+        code {
+            padding: 2px 6px;
+            color: #93c5fd;
+        }
+
+        pre {
+            padding: 14px;
+            overflow-x: auto;
+            margin: 12px 0;
+            border: 1px solid var(--card-border);
+        }
+
+        .badge-status {
+            display: inline-block;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>PFO 2 — Sistema de Gestión de Tareas</h1>
+        <p>Aplicación cliente-servidor con API REST en Flask, protección de contraseñas mediante hashing y persistencia relacional en SQLite.</p>
+    </header>
+
+    <div class="container">
+
+        <!-- OBJETIVOS Y ALCANCE -->
+        <div class="card">
+            <h2>🎯 Objetivos Cumplidos</h2>
+            <ul>
+                <li><strong>API REST con Flask:</strong> Endpoints funcionales para registro, login, gestión y consulta de tareas.</li>
+                <li><strong>Protección Criptográfica:</strong> Hashing irreversible de contraseñas utilizando el módulo <code>werkzeug.security</code>.</li>
+                <li><strong>Persistencia SQLite:</strong> Base de datos relacional local <code>tareas.db</code> con integridad referencial.</li>
+                <li><strong>Cliente de Consola Interactivo:</strong> Menú completo para interactuar con la API REST vía HTTP.</li>
+                <li><strong>Pantalla de Bienvenida HTML:</strong> Endpoint <code>GET /tareas</code> renderizando un panel visual de bienvenida para navegadores.</li>
+            </ul>
+        </div>
+
+        <!-- ARQUITECTURA -->
+        <div class="card">
+            <h2>🏗️ Arquitectura del Sistema</h2>
+            <div class="grid-2">
+                <div>
+                    <h3 style="color: #93c5fd; margin-bottom: 8px;">Cliente de Consola (Python)</h3>
+                    <p style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 12px;">Consume la API REST a través de <code>requests.Session</code>, conservando las cookies de autenticación de forma transparente.</p>
+                    <pre><code>python cliente.py</code></pre>
+                </div>
+                <div>
+                    <h3 style="color: #93c5fd; margin-bottom: 8px;">Servidor API REST (Flask + SQLite)</h3>
+                    <p style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 12px;">Valida credenciales con hashes criptográficos, maneja sesiones y persiste los datos en <code>tareas.db</code>.</p>
+                    <pre><code>python servidor.py</code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- ENDPOINTS -->
+        <div class="card">
+            <h2>🌐 Endpoints de la API REST</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Método</th>
+                        <th>Ruta</th>
+                        <th>Autenticación</th>
+                        <th>Descripción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="method post">POST</span></td>
+                        <td><code>/registro</code></td>
+                        <td>No requerida</td>
+                        <td>Recibe <code>usuario</code> y <code>contraseña</code>, hashea la clave y persiste en SQLite.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method post">POST</span></td>
+                        <td><code>/login</code></td>
+                        <td>No requerida</td>
+                        <td>Valida credenciales contra el hash almacenado y crea la sesión autenticada.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><code>/tareas</code></td>
+                        <td><span class="badge-status">Requerida</span></td>
+                        <td>Muestra el <strong>HTML de bienvenida</strong> en navegador o retorna array JSON de tareas para clientes API.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method post">POST</span></td>
+                        <td><code>/tareas</code></td>
+                        <td><span class="badge-status">Requerida</span></td>
+                        <td>Crea una nueva tarea asociada al usuario con estado inicial <code>pendiente</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method put">PUT</span></td>
+                        <td><code>/tareas/&lt;id&gt;/cerrar</code></td>
+                        <td><span class="badge-status">Requerida</span></td>
+                        <td>Modifica el estado de la tarea a <code>cerrada</code> validando pertenencia del usuario (403 si es ajena).</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method post">POST</span></td>
+                        <td><code>/logout</code></td>
+                        <td><span class="badge-status">Requerida</span></td>
+                        <td>Invalida la sesión activa e impide posteriores accesos a las tareas.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- RESPUESTAS CONCEPTUALES -->
+        <div class="card">
+            <h2>💡 Respuestas Conceptuales</h2>
+
+            <h3 style="color: #93c5fd; margin-top: 12px;">1. ¿Por qué hashear contraseñas?</h3>
+            <p style="margin-top: 6px; font-size: 0.95rem;">
+                Almacenar contraseñas en texto plano constituye una falla crítica de seguridad. Si la base de datos se ve comprometida o filtrada, cualquier atacante tendría acceso inmediato a las credenciales.
+                El hashing criptográfico proporciona:
+            </p>
+            <ul>
+                <li><strong>Irreversibilidad (Unidireccionalidad):</strong> Es una función matemática de un solo sentido; a partir del hash no es posible reconstruir la clave original.</li>
+                <li><strong>Salting Aleatorio:</strong> Algoritmos como los implementados en <code>werkzeug.security</code> añaden un salt único para cada usuario, evitando ataques por tablas arcoíris (<em>rainbow tables</em>) y garantizando que dos claves idénticas generen hashes completamente distintos.</li>
+                <li><strong>Protección contra Fuerza Bruta:</strong> El algoritmo introduce un costo computacional deliberado para ralentizar intentos masivos de adivinación.</li>
+            </ul>
+
+            <h3 style="color: #93c5fd; margin-top: 18px;">2. Ventajas de usar SQLite en este proyecto</h3>
+            <ul>
+                <li><strong>Serverless (Sin demonio independiente):</strong> No requiere instalar ni ejecutar servicios en segundo plano (como MySQL o PostgreSQL); el motor se ejecuta directamente embebido en el proceso de Python.</li>
+                <li><strong>Cero Configuración:</strong> No requiere gestión de usuarios del SGBD, configuración de puertos de escucha ni esquemas complejos.</li>
+                <li><strong>Portabilidad Absoluta:</strong> Toda la base de datos reside en un único archivo físico (<code>tareas.db</code>), facilitando copias de seguridad, pruebas y evaluaciones locales.</li>
+                <li><strong>Transaccionalidad ACID:</strong> Brinda soporte completo para transacciones atómicas, consistentes, aisladas y duraderas mediante el módulo estándar <code>sqlite3</code>.</li>
+            </ul>
+        </div>
+
+        <!-- PRUEBAS AUTOMATIZADAS -->
+        <div class="card">
+            <h2>🧪 Suite de Pruebas Automatizadas</h2>
+            <p>Se diseñó una suite con <code>unittest</code> que valida de forma integral los 7 criterios de aceptación:</p>
+            <pre><code>python -m unittest test_api.py -v</code></pre>
+            <p style="color: var(--accent); font-weight: bold; margin-top: 8px;">Resultado: 7/7 pruebas exitosas (OK).</p>
+        </div>
+
+    </div>
+
+    <footer>
+        <p>Trabajo Práctico PFO 2 — Programación de Redes &copy; 2026</p>
+        <p>Alojado mediante GitHub Pages</p>
+    </footer>
+
+</body>
+</html>
