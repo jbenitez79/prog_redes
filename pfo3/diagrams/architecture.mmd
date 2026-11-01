@@ -1,0 +1,66 @@
+flowchart TD
+    %% ==========================================
+    %% ARQUITECTURA DISTRIBUIDA PFO 3
+    %% ==========================================
+
+    subgraph CLIENT_TIER ["1. Capa de Clientes"]
+        CW["Cliente Web / Móvil<br/>(Conceptual / Futuras extensiones)"]
+        CP["Cliente de Consola Python<br/>(cliente.py)<br/>- Menú interactivo<br/>- Formateo JSON sobre TCP"]
+    end
+
+    subgraph LB_TIER ["2. Capa de Balanceo de Carga"]
+        NGINX["Nginx TCP Stream Load Balancer (:5000)<br/>- Balanceo Round-Robin / Least-Conn<br/>- Health Checks de instancias TCP"]
+    end
+
+    subgraph SERVER_TIER ["3. Capa de Servidores TCP"]
+        S1["Servidor TCP Nodo A (:5001)<br/>- ThreadPoolExecutor de Conexiones<br/>- Protocolo JSON delimitado con '\\n'<br/>- Dispatcher & Correlation Manager"]
+        S2["Servidor TCP Nodo B (:5002)<br/>- ThreadPoolExecutor de Conexiones<br/>- Protocolo JSON delimitado con '\\n'<br/>- Dispatcher & Correlation Manager"]
+    end
+
+    subgraph MESSAGE_BROKER ["4. Cola de Mensajería Asíncrona (RabbitMQ)"]
+        direction TB
+        EX["tasks_exchange (Direct)"]
+        Q_TASKS[("task_queue (Durable)<br/>Mensajes persistentes de tareas")]
+        Q_RESULTS[("results_queue (Durable)<br/>Mensajes de resultados RPC")]
+        EX --> Q_TASKS
+    end
+
+    subgraph WORKER_TIER ["5. Capa de Procesamiento (Workers Distribuidos)"]
+        W1["Worker 1 (ID: worker-01)<br/>- ThreadPoolExecutor (Hilos de ejecución)<br/>- Validador de esquemas y operaciones<br/>- Ejecutor: sum, multiply, max"]
+        W2["Worker 2 (ID: worker-02)<br/>- ThreadPoolExecutor (Hilos de ejecución)<br/>- Validador de esquemas y operaciones<br/>- Ejecutor: sum, multiply, max"]
+    end
+
+    subgraph PERSISTENCE_TIER ["6. Capa de Persistencia y Almacenamiento"]
+        PG[("PostgreSQL Database<br/>- Tabla: tasks<br/>- Estados: pending, processing, completed, failed<br/>- Metadatos, timestamps, worker_id, resultado")]
+        S3[("S3 / MinIO Object Storage<br/>- Bucket: task-artifacts<br/>- Persistencia de grandes volúmenes y artefactos")]
+    end
+
+    %% Flujos de Red y Protocolos
+    CP -->|"TCP / JSON delimitado '\\n'"| NGINX
+    CW -.->|"TCP / WebSocket"| NGINX
+
+    NGINX -->|"TCP Stream Forward (:5001)"| S1
+    NGINX -->|"TCP Stream Forward (:5002)"| S2
+
+    S1 -->|"AMQP 0-9-1 (Publish Task)"| EX
+    S2 -->|"AMQP 0-9-1 (Publish Task)"| EX
+
+    Q_TASKS -->|"AMQP 0-9-1 (Consume Task)"| W1
+    Q_TASKS -->|"AMQP 0-9-1 (Consume Task)"| W2
+
+    W1 -->|"SQL Parametrizado (INSERT/UPDATE)"| PG
+    W2 -->|"SQL Parametrizado (INSERT/UPDATE)"| PG
+
+    W1 -.->|"S3 API (Boto3 / MinIO)"| S3
+    W2 -.->|"S3 API (Boto3 / MinIO)"| S3
+
+    W1 -->|"AMQP 0-9-1 (Publish Result + correlation_id)"| Q_RESULTS
+    W2 -->|"AMQP 0-9-1 (Publish Result + correlation_id)"| Q_RESULTS
+
+    Q_RESULTS -->|"AMQP 0-9-1 (Listen Response)"| S1
+    Q_RESULTS -->|"AMQP 0-9-1 (Listen Response)"| S2
+
+    S1 -->|"Respuesta TCP al Socket"| NGINX
+    S2 -->|"Respuesta TCP al Socket"| NGINX
+
+    NGINX -->|"Respuesta final TCP"| CP
