@@ -225,7 +225,7 @@ python demo_distributed.py
 
 ## 7. 🧪 Pruebas Automatizadas
 
-La suite cuenta con **26 pruebas automatizadas** que cubren todos los niveles: unitarias, integración, resiliencia y concurrencia.
+La suite cuenta con **28 pruebas automatizadas** que cubren todos los niveles: unitarias, integración, confiabilidad, concurrencia y resiliencia.
 
 Para ejecutar todas las pruebas:
 ```powershell
@@ -238,6 +238,7 @@ pytest tests -v
 - `test_client_server.py`: Comunicación real TCP sobre sockets, múltiples clientes concurrentes, persistencia de sesión y resiliencia ante clientes desconectados abruptamente.
 - `test_dispatcher.py`: Sincronización multi-hilo, correlación de solicitudes y control de timeouts.
 - `test_persistence.py`: Seguridad contra inyección SQL mediante consultas parametrizadas.
+- `test_worker_reliability.py`: Verificación de publicación thread-safe mediante `add_callback_threadsafe` y confiabilidad atómica (reencolado `basic_nack(requeue=True)` si falla la publicación del resultado, garantizando que una tarea no se pierde).
 - `test_live_distributed_flow.py`: Prueba de integración extremo a extremo contra PostgreSQL y RabbitMQ reales.
 
 ---

@@ -5,11 +5,14 @@ actualiza el estado en PostgreSQL, persiste artefactos en S3 y publica el result
 """
 
 import argparse
+import json
 import logging
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Optional
 
+from pika.exceptions import AMQPConnectionError, AMQPError
 from config.settings import settings
 from messaging.rabbitmq_client import RabbitMQClient
 from storage.postgres import PostgresStorage
@@ -39,14 +42,6 @@ class DistributedWorker:
         self.storage = postgres_storage or PostgresStorage()
         self.s3 = s3_storage or S3Storage()
         self.thread_pool = ThreadPoolExecutor(max_workers=self.threads, thread_name_prefix=f"{self.worker_id}-thread")
-        self._publisher = RabbitMQClient(
-            host=self.rmq.host,
-            port=self.rmq.port,
-            user=self.rmq.user,
-            password=self.rmq.password,
-            queue_tasks=self.rmq.queue_tasks,
-            queue_results=self.rmq.queue_results
-        )
         self._running = False
 
     def _process_task_job(
@@ -54,7 +49,9 @@ class DistributedWorker:
         msg: Dict[str, Any],
         correlation_id: str,
         reply_to: str,
-        ack_func: Callable[[], None]
+        safe_ack: Callable[[], None],
+        safe_nack: Callable[[bool], None],
+        safe_publish_and_ack: Callable[[bytes, str, str], None]
     ) -> None:
         """Trabajo ejecutado dentro del ThreadPoolExecutor del Worker."""
         request_id = msg.get("request_id", correlation_id)
@@ -127,26 +124,30 @@ class DistributedWorker:
                 task_id=task_id
             )
 
-        # 6. Publicar resultado en RabbitMQ
+        # 6. Publicar resultado y confirmar mensaje de forma thread-safe y coordinada
+        # Confiabilidad: El mensaje original SOLO se confirma (ack) si la publicación
+        # del resultado se programa exitosamente en el loop de RabbitMQ.
         try:
-            self._publisher.publish_result(
-                result_data=response_msg,
-                correlation_id=correlation_id,
-                routing_key=reply_to
-            )
+            res_bytes = json.dumps(response_msg, ensure_ascii=False).encode("utf-8")
+            safe_publish_and_ack(res_bytes, reply_to, correlation_id)
+            logger.info(f"[{self.worker_id}] Tarea {task_id} procesada, resultado coordinado para publicación y ack.")
         except Exception as e:
-            logger.error(f"[{self.worker_id}] Error al publicar resultado a RabbitMQ: {e}")
-
-        # 7. Confirmar mensaje (ack)
-        ack_func()
-        logger.info(f"[{self.worker_id}] Mensaje de tarea {task_id} confirmado (ack).")
+            logger.error(f"[{self.worker_id}] Error al programar publicación y confirmación para tarea {task_id}: {e}")
+            # Si falla la publicación, reencolamos el mensaje original para no perder la tarea
+            try:
+                safe_nack(True)
+                logger.warning(f"[{self.worker_id}] Tarea {task_id} reencolada (nack) tras error de publicación.")
+            except Exception as nack_err:
+                logger.error(f"[{self.worker_id}] Error al reencolar tarea {task_id}: {nack_err}")
 
     def _task_consumer_callback(
         self,
         msg: Dict[str, Any],
         correlation_id: str,
         reply_to: str,
-        ack_func: Callable[[], None]
+        ack_func: Callable[[], None],
+        nack_func: Callable[[bool], None],
+        publish_func: Callable[[bytes, str, str], None]
     ) -> None:
         """Callback invocado por RabbitMQ al llegar un mensaje a la cola."""
         logger.debug(f"[{self.worker_id}] Despachando tarea recibida al pool de hilos ({self.threads} hilos).")
@@ -160,7 +161,35 @@ class DistributedWorker:
             except Exception as e:
                 logger.error(f"Error en safe_ack: {e}")
 
-        self.thread_pool.submit(self._process_task_job, msg, correlation_id, reply_to, safe_ack)
+        def safe_nack(requeue: bool = True):
+            try:
+                if self.rmq._connection and self.rmq._connection.is_open:
+                    self.rmq._connection.add_callback_threadsafe(lambda: nack_func(requeue))
+                else:
+                    nack_func(requeue)
+            except Exception as e:
+                logger.error(f"Error en safe_nack: {e}")
+
+        def safe_publish_and_ack(body_bytes: bytes, target_queue: str, corr_id: str):
+            """Publica el resultado y confirma el mensaje en el hilo del canal de forma atómica."""
+            def _thread_action():
+                publish_func(body_bytes, target_queue, corr_id)
+                ack_func()
+
+            if self.rmq._connection and self.rmq._connection.is_open:
+                self.rmq._connection.add_callback_threadsafe(_thread_action)
+            else:
+                _thread_action()
+
+        self.thread_pool.submit(
+            self._process_task_job,
+            msg,
+            correlation_id,
+            reply_to,
+            safe_ack,
+            safe_nack,
+            safe_publish_and_ack
+        )
 
     def start(self) -> None:
         """Inicia el ciclo principal de escucha y consumo de tareas."""

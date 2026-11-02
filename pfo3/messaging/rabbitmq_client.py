@@ -156,11 +156,38 @@ class RabbitMQClient:
                     except Exception as err:
                         logger.error(f"Error al enviar basic_ack: {err}")
 
-                callback(msg, corr_id, reply_to, ack)
+                def nack(requeue: bool = True):
+                    try:
+                        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=requeue)
+                    except Exception as err:
+                        logger.error(f"Error al enviar basic_nack: {err}")
+
+                def publish_result_threadsafe(res_body: bytes, routing_k: str, correlation: str):
+                    try:
+                        res_props = pika.BasicProperties(
+                            delivery_mode=2,
+                            correlation_id=correlation,
+                            content_type="application/json"
+                        )
+                        ch.basic_publish(
+                            exchange="",
+                            routing_key=routing_k,
+                            body=res_body,
+                            properties=res_props
+                        )
+                        logger.debug(f"Resultado publicado thread-safe en {routing_k} (corr_id={correlation})")
+                    except Exception as err:
+                        logger.error(f"Error al publicar resultado thread-safe: {err}")
+                        raise
+
+                callback(msg, corr_id, reply_to, ack, nack, publish_result_threadsafe)
             except Exception as e:
                 logger.error(f"Error al procesar mensaje de RabbitMQ: {e}")
-                # En caso de error irrecuperable en deserialización, se confirma para evitar bloqueo de la cola
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+                # En caso de error irrecuperable en deserialización, se rechaza sin reencolar
+                try:
+                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                except Exception:
+                    pass
 
         self._channel.basic_consume(
             queue=self.queue_tasks,
